@@ -51,6 +51,9 @@
     .btn-danger { background: var(--danger); color: #fff; }
     .btn-sm { padding: .38rem .85rem; font-size: .82rem; }
     .err { color: #fca5a5; font-size: .88rem; text-align: center; min-height: 1.2rem; }
+    .remember-row { display: flex; align-items: center; gap: .5rem; }
+    .remember-row input[type="checkbox"] { width: 1.1rem; height: 1.1rem; accent-color: var(--accent); cursor: pointer; border-radius: .25rem; }
+    .remember-row label { font-size: .88rem; color: var(--muted); cursor: pointer; }
 
     /* ── APP LAYOUT ── */
     #app { display: none; flex-direction: column; height: 100vh; max-width: 480px; margin: 0 auto; }
@@ -178,6 +181,10 @@
   <form id="login-form" class="auth-form" onsubmit="login(event)">
     <input type="email" id="login-email" placeholder="Email" required>
     <input type="password" id="login-pass" placeholder="Contraseña" required>
+    <div class="remember-row">
+      <input type="checkbox" id="remember" checked>
+      <label for="remember">Recordar sesión</label>
+    </div>
     <button type="submit" class="btn btn-primary">Entrar</button>
     <div id="login-err" class="err"></div>
   </form>
@@ -288,7 +295,10 @@
 // ══════════════════════════════════════════
 const SUPABASE_URL     = 'https://ykcyhgnnsvcpaqbityiq.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlrY3loZ25uc2N2cGFxYml0eWlxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMzI2MzEsImV4cCI6MjA5NjcwODYzMX0.Z30brUjk6vGo0sAfxyM2h6_Y41iVwt4pVC-CmdvSTSA';
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const STORAGE_KEY = 'macrotrack_auth';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { persistSession: false, autoRefreshToken: true }
+});
 
 // ══════════════════════════════════════════
 //  DEFAULTS
@@ -326,13 +336,30 @@ let srItems      = []; // search result items cache
 // ══════════════════════════════════════════
 //  BOOT
 // ══════════════════════════════════════════
-sb.auth.getSession().then(({ data }) => {
-  if (data.session) initApp(data.session.user);
-});
 sb.auth.onAuthStateChange((event, session) => {
   if (event === 'SIGNED_IN')  initApp(session.user);
   if (event === 'SIGNED_OUT') showAuth();
+  // Update stored tokens whenever they refresh
+  if (event === 'TOKEN_REFRESHED' && session && localStorage.getItem(STORAGE_KEY)) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      access_token:  session.access_token,
+      refresh_token: session.refresh_token,
+    }));
+  }
 });
+// Restore saved session on load
+(async () => {
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (saved) {
+    try {
+      const tokens = JSON.parse(saved);
+      const { error } = await sb.auth.setSession(tokens);
+      if (error) localStorage.removeItem(STORAGE_KEY);
+    } catch (e) {
+      localStorage.removeItem(STORAGE_KEY);
+    }
+  }
+})();
 
 // ══════════════════════════════════════════
 //  AUTH
@@ -355,10 +382,17 @@ function showRegister() {
 }
 async function login(e) {
   e.preventDefault();
-  const { error } = await sb.auth.signInWithPassword({
+  const remember = document.getElementById('remember').checked;
+  const { data, error } = await sb.auth.signInWithPassword({
     email:    document.getElementById('login-email').value,
     password: document.getElementById('login-pass').value,
   });
+  if (!error && remember && data.session) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      access_token:  data.session.access_token,
+      refresh_token: data.session.refresh_token,
+    }));
+  }
   document.getElementById('login-err').textContent = error ? error.message : '';
 }
 async function register(e) {
@@ -371,7 +405,10 @@ async function register(e) {
     ? error.message
     : 'Revisa tu email para confirmar el registro.';
 }
-async function logout() { await sb.auth.signOut(); }
+async function logout() {
+  await sb.auth.signOut();
+  localStorage.removeItem(STORAGE_KEY);
+}
 
 // ══════════════════════════════════════════
 //  INIT
