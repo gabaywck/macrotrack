@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#1e293b">
+  <title>MacroTrack</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --surface2: #334155;
+      --accent: #14b8a6;
+      --accent-dark: #0d9488;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --danger: #ef4444;
+      --border: #334155;
+    }
+    html, body { height: 100%; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 16px; }
+
+    /* ── AUTH ── */
+    #auth {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      min-height: 100vh; padding: 2rem; gap: .9rem;
+    }
+    #auth h1 { font-size: 2rem; }
+    #auth p { color: var(--muted); margin-bottom: .5rem; }
+    .auth-tabs { display: flex; gap: .5rem; }
+    .auth-tabs button {
+      padding: .45rem 1.4rem; border-radius: 2rem; border: 1px solid var(--border);
+      background: transparent; color: var(--muted); cursor: pointer; transition: all .2s; font-size: .95rem;
+    }
+    .auth-tabs button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .auth-form { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: .7rem; }
+
+    /* ── INPUTS / BUTTONS ── */
+    input {
+      width: 100%; padding: .72rem 1rem; border-radius: .75rem;
+      border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 1rem;
+    }
+    input::placeholder { color: var(--muted); }
+    input:focus { outline: none; border-color: var(--accent); }
+    .btn { padding: .72rem 1.4rem; border-radius: .75rem; border: none; font-size: 1rem; font-weight: 600; cursor: pointer; transition: background .2s; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent-dark); }
+    .btn-secondary { background: var(--surface2); color: var(--text); }
+    .btn-danger { background: var(--danger); color: #fff; }
+    .btn-sm { padding: .38rem .85rem; font-size: .82rem; }
+    .err { color: #fca5a5; font-size: .88rem; text-align: center; min-height: 1.2rem; }
+
+    /* ── APP LAYOUT ── */
+    #app { display: none; flex-direction: column; height: 100vh; max-width: 480px; margin: 0 auto; }
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 1rem 1.2rem; background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    header h1 { font-size: 1.2rem; }
+    header button {
+      background: transparent; border: 1px solid var(--border); color: var(--muted);
+      padding: .35rem .85rem; border-radius: .5rem; cursor: pointer; font-size: .82rem;
+    }
+    main { flex: 1; overflow-y: auto; padding: 1rem 1rem 5.5rem; }
+    nav {
+      position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+      width: 100%; max-width: 480px; display: flex; background: var(--surface);
+      border-top: 1px solid var(--border); padding: .4rem; gap: .25rem; z-index: 10;
+    }
+    nav button {
+      flex: 1; padding: .55rem; border-radius: .5rem; border: none;
+      background: transparent; color: var(--muted); font-size: .78rem; cursor: pointer; transition: all .2s;
+    }
+    nav button.active { background: var(--accent); color: #fff; }
+
+    /* ── CARDS ── */
+    .card { background: var(--surface); border-radius: 1rem; padding: 1rem; margin-bottom: 1rem; }
+    .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: .75rem; }
+    .section-header h3 { font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+
+    /* ── MACROS ── */
+    .macro-main { text-align: center; padding: .75rem 0 .5rem; }
+    .macro-kcal { font-size: 2.8rem; font-weight: 700; color: var(--accent); line-height: 1; }
+    .macro-label { font-size: .82rem; color: var(--muted); margin-top: .25rem; }
+    .macro-remaining { font-size: .9rem; color: var(--muted); margin-top: .3rem; }
+    .macro-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: .75rem; margin-top: 1rem; }
+    .macro-col { text-align: center; }
+    .macro-col .val { font-weight: 700; font-size: 1.05rem; }
+    .macro-col .lbl { font-size: .72rem; color: var(--muted); }
+    .macro-col .goal { font-size: .72rem; color: var(--muted); }
+    .bar { height: 5px; background: var(--border); border-radius: 3px; margin-top: .3rem; overflow: hidden; }
+    .bar-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width .4s; }
+
+    /* ── DIARY ── */
+    .diary-entry { display: flex; align-items: center; justify-content: space-between; padding: .7rem 0; border-bottom: 1px solid var(--border); }
+    .diary-entry:last-child { border-bottom: none; }
+    .diary-name { font-weight: 600; font-size: .93rem; }
+    .diary-qty { color: var(--muted); font-weight: 400; font-size: .82rem; }
+    .diary-macros { font-size: .72rem; color: var(--muted); margin-top: .12rem; }
+    .icon-btn { background: transparent; border: none; color: var(--muted); cursor: pointer; font-size: 1.15rem; padding: .25rem .45rem; border-radius: .4rem; }
+    .icon-btn:hover { color: var(--danger); background: rgba(239,68,68,.1); }
+    .empty { color: var(--muted); text-align: center; padding: 1rem 0; font-size: .88rem; }
+
+    /* ── WATER ── */
+    .water-btns { display: flex; flex-wrap: wrap; gap: .45rem; margin-bottom: .75rem; }
+    .water-btn {
+      padding: .38rem .85rem; border-radius: 2rem; border: 1px solid var(--accent);
+      background: transparent; color: var(--accent); cursor: pointer; font-size: .82rem; transition: all .2s;
+    }
+    .water-btn:hover { background: var(--accent); color: #fff; }
+    .water-custom { display: flex; gap: .5rem; align-items: center; }
+    .water-custom input { flex: 1; }
+    .water-stat { margin-top: .75rem; font-size: .95rem; color: var(--muted); }
+    .water-stat span { color: var(--text); font-weight: 600; }
+    .bar-blue .bar-fill { background: #38bdf8; }
+    .bar-blue { height: 8px; margin-top: .45rem; }
+
+    /* ── FOOD / RECIPE LIST ── */
+    .list-item { display: flex; align-items: center; justify-content: space-between; padding: .7rem 0; border-bottom: 1px solid var(--border); }
+    .list-item:last-child { border-bottom: none; }
+    .list-name { font-weight: 600; font-size: .93rem; }
+    .list-macros { font-size: .72rem; color: var(--muted); margin-top: .1rem; }
+    .search-bar {
+      width: 100%; padding: .6rem .95rem; border-radius: .75rem; border: 1px solid var(--border);
+      background: var(--surface2); color: var(--text); font-size: .92rem; margin-bottom: .75rem;
+    }
+
+    /* ── GOALS ── */
+    .goals-form { display: flex; flex-direction: column; gap: .7rem; margin-top: .75rem; }
+    .goals-form label { display: block; font-size: .82rem; color: var(--muted); margin-bottom: .3rem; }
+
+    /* ── MODAL ── */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,.72);
+      z-index: 200; align-items: flex-end; justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: var(--surface); border-radius: 1.4rem 1.4rem 0 0;
+      padding: 1.4rem 1.2rem; width: 100%; max-width: 480px; max-height: 88vh; overflow-y: auto;
+    }
+    .modal h2 { font-size: 1.15rem; margin-bottom: 1rem; }
+    .modal-actions { display: flex; gap: .65rem; margin-top: 1rem; }
+    .modal-actions button { flex: 1; }
+    .form-group { margin-bottom: .7rem; }
+    .form-group label { display: block; font-size: .82rem; color: var(--muted); margin-bottom: .3rem; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
+    .search-results {
+      display: none; border: 1px solid var(--border); border-radius: .75rem;
+      margin-top: .4rem; max-height: 180px; overflow-y: auto;
+    }
+    .sr-item { padding: .6rem .95rem; cursor: pointer; border-bottom: 1px solid var(--border); }
+    .sr-item:last-child { border-bottom: none; }
+    .sr-item:hover { background: var(--surface2); }
+    .sr-name { font-weight: 600; font-size: .88rem; }
+    .sr-badge { color: var(--accent); font-size: .72rem; margin-left: .35rem; }
+    .sr-macros { font-size: .72rem; color: var(--muted); }
+    .selected-box { background: var(--surface2); border-radius: .75rem; padding: .7rem .95rem; margin: .5rem 0; }
+    .selected-box-name { font-weight: 600; font-size: .92rem; }
+    .selected-box-macros { font-size: .75rem; color: var(--muted); margin-top: .1rem; }
+    .toggle-link { background: none; border: none; color: var(--accent); cursor: pointer; font-size: .82rem; text-decoration: underline; padding: 0; margin-top: .5rem; display: inline-block; }
+    hr.divider { border: none; border-top: 1px solid var(--border); margin: 1rem 0; }
+    .inline-recipe-title { font-size: .92rem; font-weight: 600; margin-bottom: .7rem; }
+  </style>
+</head>
+<body>
+
+<!-- ══ AUTH SCREEN ══ -->
+<div id="auth">
+  <h1>🥗 MacroTrack</h1>
+  <p>Tu diario de nutrición personal</p>
+  <div class="auth-tabs">
+    <button id="tab-login" class="active" onclick="showLogin()">Iniciar sesión</button>
+    <button id="tab-reg" onclick="showRegister()">Registro</button>
+  </div>
+  <form id="login-form" class="auth-form" onsubmit="login(event)">
+    <input type="email" id="login-email" placeholder="Email" required>
+    <input type="password" id="login-pass" placeholder="Contraseña" required>
+    <button type="submit" class="btn btn-primary">Entrar</button>
+    <div id="login-err" class="err"></div>
+  </form>
+  <form id="reg-form" class="auth-form" style="display:none" onsubmit="register(event)">
+    <input type="email" id="reg-email" placeholder="Email" required>
+    <input type="password" id="reg-pass" placeholder="Contraseña" required minlength="6">
+    <button type="submit" class="btn btn-primary">Crear cuenta</button>
+    <div id="reg-err" class="err"></div>
+  </form>
+</div>
+
+<!-- ══ MAIN APP ══ -->
+<div id="app">
+  <header>
+    <h1>🥗 MacroTrack</h1>
+    <button onclick="logout()">Salir</button>
+  </header>
+  <main id="main"></main>
+  <nav>
+    <button id="nav-today"   class="active" onclick="switchTab('today')">Hoy</button>
+    <button id="nav-foods"             onclick="switchTab('foods')">Alimentos</button>
+    <button id="nav-recipes"           onclick="switchTab('recipes')">Recetas</button>
+    <button id="nav-goals"             onclick="switchTab('goals')">Objetivos</button>
+  </nav>
+</div>
+
+<!-- ══ MODAL: Añadir comida ══ -->
+<div id="modal-add-meal" class="modal-overlay">
+  <div class="modal">
+    <h2>Añadir comida</h2>
+    <div class="form-group">
+      <input type="text" id="meal-search" placeholder="Buscar alimento o receta…" oninput="searchItems(this.value)" autocomplete="off">
+      <div id="meal-results" class="search-results"></div>
+    </div>
+    <div id="meal-selected" style="display:none">
+      <div class="selected-box">
+        <div class="selected-box-name" id="sel-name"></div>
+        <div class="selected-box-macros" id="sel-macros"></div>
+      </div>
+      <div class="form-group">
+        <label>Cantidad (g)</label>
+        <input type="number" id="meal-qty" placeholder="gramos" min="1">
+      </div>
+    </div>
+    <div id="inline-recipe" style="display:none">
+      <hr class="divider">
+      <div class="inline-recipe-title">Nueva receta</div>
+      <div class="form-group"><label>Nombre</label><input type="text" id="ir-name" placeholder="Nombre de la receta"></div>
+      <div class="form-grid">
+        <div class="form-group"><label>Kcal/100g</label><input type="number" id="ir-kcal"></div>
+        <div class="form-group"><label>Proteína/100g</label><input type="number" id="ir-protein"></div>
+        <div class="form-group"><label>Carbos/100g</label><input type="number" id="ir-carbs"></div>
+        <div class="form-group"><label>Grasa/100g</label><input type="number" id="ir-fat"></div>
+      </div>
+      <div style="display:flex;gap:.5rem">
+        <button class="btn btn-secondary btn-sm" onclick="saveInlineRecipe()">Guardar y seleccionar</button>
+        <button class="btn btn-secondary btn-sm" onclick="toggleInlineRecipe(false)">Cancelar</button>
+      </div>
+    </div>
+    <button class="toggle-link" id="ir-toggle" onclick="toggleInlineRecipe(true)">✏️ Crear receta nueva aquí</button>
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="registerMeal()">Registrar</button>
+      <button class="btn btn-secondary" onclick="closeModal('modal-add-meal')">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: Nuevo alimento ══ -->
+<div id="modal-new-food" class="modal-overlay">
+  <div class="modal">
+    <h2>Nuevo alimento</h2>
+    <div class="form-group"><label>Nombre</label><input type="text" id="nf-name"></div>
+    <div class="form-grid">
+      <div class="form-group"><label>Kcal/100g</label><input type="number" id="nf-kcal"></div>
+      <div class="form-group"><label>Proteína/100g</label><input type="number" id="nf-protein"></div>
+      <div class="form-group"><label>Carbos/100g</label><input type="number" id="nf-carbs"></div>
+      <div class="form-group"><label>Grasa/100g</label><input type="number" id="nf-fat"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="saveNewFood()">Guardar</button>
+      <button class="btn btn-secondary" onclick="closeModal('modal-new-food')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: Nueva receta ══ -->
+<div id="modal-new-recipe" class="modal-overlay">
+  <div class="modal">
+    <h2>Nueva receta</h2>
+    <div class="form-group"><label>Nombre</label><input type="text" id="nr-name"></div>
+    <div class="form-grid">
+      <div class="form-group"><label>Kcal/100g</label><input type="number" id="nr-kcal"></div>
+      <div class="form-group"><label>Proteína/100g</label><input type="number" id="nr-protein"></div>
+      <div class="form-group"><label>Carbos/100g</label><input type="number" id="nr-carbs"></div>
+      <div class="form-group"><label>Grasa/100g</label><input type="number" id="nr-fat"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="saveNewRecipe()">Guardar</button>
+      <button class="btn btn-secondary" onclick="closeModal('modal-new-recipe')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.3/dist/umd/supabase.min.js"></script>
+<script>
+// ══════════════════════════════════════════
+//  CONFIG
+// ══════════════════════════════════════════
+const SUPABASE_URL     = 'https://ykcyhgnnsvcpaqbityiq.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlrY3loZ25uc2N2cGFxYml0eWlxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMzI2MzEsImV4cCI6MjA5NjcwODYzMX0.Z30brUjk6vGo0sAfxyM2h6_Y41iVwt4pVC-CmdvSTSA';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ══════════════════════════════════════════
+//  DEFAULTS
+// ══════════════════════════════════════════
+const DEFAULT_FOODS = [
+  { name: 'Pechuga de pollo',    kcal: 165, protein: 31,   carbs: 0,    fat: 3.6 },
+  { name: 'Arroz blanco cocido', kcal: 130, protein: 2.7,  carbs: 28,   fat: 0.3 },
+  { name: 'Huevo entero',        kcal: 155, protein: 13,   carbs: 1.1,  fat: 11  },
+  { name: 'Avena',               kcal: 389, protein: 17,   carbs: 66,   fat: 7   },
+  { name: 'Plátano',             kcal: 89,  protein: 1.1,  carbs: 23,   fat: 0.3 },
+  { name: 'Atún en agua',        kcal: 116, protein: 26,   carbs: 0,    fat: 1   },
+  { name: 'Pan de molde',        kcal: 265, protein: 9,    carbs: 49,   fat: 3.2 },
+  { name: 'Leche entera',        kcal: 61,  protein: 3.2,  carbs: 4.8,  fat: 3.3 },
+  { name: 'Yogur natural',       kcal: 59,  protein: 3.5,  carbs: 4.7,  fat: 3.3 },
+  { name: 'Almendras',           kcal: 579, protein: 21,   carbs: 22,   fat: 50  },
+];
+const DEFAULT_RECIPES = [
+  { name: 'Pincho tortilla con atún', kcal: 186, protein: 11.4, carbs: 17.1, fat: 7.9 },
+];
+
+// ══════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════
+let user        = null;
+let tab         = 'today';
+let today       = new Date().toISOString().split('T')[0];
+let diary       = [];
+let waterTotal  = 0;
+let foods       = [];
+let recipes     = [];
+let goals       = { calories: 2000, protein_g: 150, carbs_g: 200, fat_g: 70, water_ml: 2000 };
+let selectedItem = null;
+let srItems      = []; // search result items cache
+
+// ══════════════════════════════════════════
+//  BOOT
+// ══════════════════════════════════════════
+sb.auth.getSession().then(({ data }) => {
+  if (data.session) initApp(data.session.user);
+});
+sb.auth.onAuthStateChange((event, session) => {
+  if (event === 'SIGNED_IN')  initApp(session.user);
+  if (event === 'SIGNED_OUT') showAuth();
+});
+
+// ══════════════════════════════════════════
+//  AUTH
+// ══════════════════════════════════════════
+function showAuth() {
+  document.getElementById('auth').style.display = 'flex';
+  document.getElementById('app').style.display  = 'none';
+}
+function showLogin() {
+  document.getElementById('login-form').style.display = 'flex';
+  document.getElementById('reg-form').style.display   = 'none';
+  document.getElementById('tab-login').classList.add('active');
+  document.getElementById('tab-reg').classList.remove('active');
+}
+function showRegister() {
+  document.getElementById('login-form').style.display = 'none';
+  document.getElementById('reg-form').style.display   = 'flex';
+  document.getElementById('tab-login').classList.remove('active');
+  document.getElementById('tab-reg').classList.add('active');
+}
+async function login(e) {
+  e.preventDefault();
+  const { error } = await sb.auth.signInWithPassword({
+    email:    document.getElementById('login-email').value,
+    password: document.getElementById('login-pass').value,
+  });
+  document.getElementById('login-err').textContent = error ? error.message : '';
+}
+async function register(e) {
+  e.preventDefault();
+  const { error } = await sb.auth.signUp({
+    email:    document.getElementById('reg-email').value,
+    password: document.getElementById('reg-pass').value,
+  });
+  document.getElementById('reg-err').textContent = error
+    ? error.message
+    : 'Revisa tu email para confirmar el registro.';
+}
+async function logout() { await sb.auth.signOut(); }
+
+// ══════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════
+async function initApp(u) {
+  user = u;
+  document.getElementById('auth').style.display = 'none';
+  document.getElementById('app').style.display  = 'flex';
+  await loadAll();
+  renderTab();
+}
+async function loadAll() {
+  await Promise.all([loadDiary(), loadWater(), loadFoods(), loadRecipes(), loadGoals()]);
+}
+
+// ══════════════════════════════════════════
+//  DATA LOADERS
+// ══════════════════════════════════════════
+async function loadDiary() {
+  const { data } = await sb.from('diary_entries')
+    .select('*').eq('user_id', user.id).eq('date', today).order('created_at');
+  diary = data || [];
+}
+async function loadWater() {
+  const { data } = await sb.from('water_entries')
+    .select('amount_ml').eq('user_id', user.id).eq('date', today);
+  waterTotal = (data || []).reduce((s, r) => s + Number(r.amount_ml), 0);
+}
+async function loadFoods() {
+  const { data } = await sb.from('foods')
+    .select('*').eq('user_id', user.id).order('name');
+  foods = data || [];
+  if (foods.length === 0) await seedFoods();
+}
+async function loadRecipes() {
+  const { data } = await sb.from('recipes')
+    .select('*').eq('user_id', user.id).order('name');
+  recipes = data || [];
+  if (recipes.length === 0) await seedRecipes();
+}
+async function loadGoals() {
+  const { data } = await sb.from('user_goals')
+    .select('*').eq('user_id', user.id).maybeSingle();
+  if (data) goals = data;
+}
+async function seedFoods() {
+  const rows = DEFAULT_FOODS.map(f => ({ ...f, user_id: user.id }));
+  const { data } = await sb.from('foods').insert(rows).select();
+  foods = data || [];
+}
+async function seedRecipes() {
+  const rows = DEFAULT_RECIPES.map(r => ({ ...r, user_id: user.id }));
+  const { data } = await sb.from('recipes').insert(rows).select();
+  recipes = data || [];
+}
+
+// ══════════════════════════════════════════
+//  RENDER
+// ══════════════════════════════════════════
+function switchTab(t) { tab = t; renderTab(); }
+function renderTab() {
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('nav-' + tab).classList.add('active');
+  const main = document.getElementById('main');
+  if      (tab === 'today')   main.innerHTML = renderToday();
+  else if (tab === 'foods')   main.innerHTML = renderFoods();
+  else if (tab === 'recipes') main.innerHTML = renderRecipes();
+  else if (tab === 'goals')   main.innerHTML = renderGoals();
+}
+
+// ── Today ──
+function pct(v, g) { return Math.min(100, g > 0 ? (v / g) * 100 : 0).toFixed(1) + '%'; }
+function r(n) { return Math.round(n * 10) / 10; }
+
+function renderToday() {
+  const tot = diary.reduce((s, e) => ({
+    kcal:    s.kcal    + Number(e.kcal),
+    protein: s.protein + Number(e.protein),
+    carbs:   s.carbs   + Number(e.carbs),
+    fat:     s.fat     + Number(e.fat),
+  }), { kcal: 0, protein: 0, carbs: 0, fat: 0 });
+
+  const rem = goals.calories - tot.kcal;
+
+  const diaryRows = diary.length === 0
+    ? '<p class="empty">Sin comidas registradas</p>'
+    : diary.map(e => `
+        <div class="diary-entry">
+          <div>
+            <div class="diary-name">${e.item_name} <span class="diary-qty">(${e.quantity_g}g)</span></div>
+            <div class="diary-macros">${r(e.kcal)} kcal · ${r(e.protein)}g P · ${r(e.carbs)}g C · ${r(e.fat)}g G</div>
+          </div>
+          <button class="icon-btn" onclick="deleteDiary('${e.id}')">×</button>
+        </div>
+      `).join('');
+
+  const waterPct = pct(waterTotal, goals.water_ml);
+
+  return `
+    <div class="card">
+      <div class="macro-main">
+        <div class="macro-kcal">${Math.round(tot.kcal)}</div>
+        <div class="macro-label">kcal consumidas</div>
+        <div class="macro-remaining">${Math.round(rem)} restantes</div>
+      </div>
+      <div class="macro-grid">
+        <div class="macro-col">
+          <div class="val">${r(tot.protein)}g</div>
+          <div class="lbl">Proteína</div>
+          <div class="goal">/${goals.protein_g}g</div>
+          <div class="bar"><div class="bar-fill" style="width:${pct(tot.protein, goals.protein_g)}"></div></div>
+        </div>
+        <div class="macro-col">
+          <div class="val">${r(tot.carbs)}g</div>
+          <div class="lbl">Carbos</div>
+          <div class="goal">/${goals.carbs_g}g</div>
+          <div class="bar"><div class="bar-fill" style="width:${pct(tot.carbs, goals.carbs_g)}"></div></div>
+        </div>
+        <div class="macro-col">
+          <div class="val">${r(tot.fat)}g</div>
+          <div class="lbl">Grasa</div>
+          <div class="goal">/${goals.fat_g}g</div>
+          <div class="bar"><div class="bar-fill" style="width:${pct(tot.fat, goals.fat_g)}"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-header">
+        <h3>Comidas de hoy</h3>
+        <button class="btn btn-primary btn-sm" onclick="openAddMeal()">+ Añadir comida</button>
+      </div>
+      ${diaryRows}
+    </div>
+
+    <div class="card">
+      <div class="section-header"><h3>Agua 💧</h3></div>
+      <div class="water-btns">
+        ${[150, 200, 250, 330, 500].map(ml =>
+          `<button class="water-btn" onclick="addWater(${ml})">${ml} ml</button>`
+        ).join('')}
+      </div>
+      <div class="water-custom">
+        <input type="number" id="water-custom" placeholder="ml" min="1">
+        <button class="btn btn-secondary btn-sm" onclick="addCustomWater()">+</button>
+      </div>
+      <div class="water-stat">
+        <span>${Math.round(waterTotal)} ml</span> / ${goals.water_ml} ml
+      </div>
+      <div class="bar bar-blue">
+        <div class="bar-fill" style="width:${waterPct};background:#38bdf8"></div>
+      </div>
+    </div>
+  `;
+}
+
+// ── Foods ──
+let foodFilter = '';
+function renderFoods(filter) {
+  if (filter !== undefined) foodFilter = filter;
+  const q = foodFilter.toLowerCase();
+  const list = foods.filter(f => f.name.toLowerCase().includes(q));
+  return `
+    <div class="card">
+      <div class="section-header">
+        <h3>Base de alimentos</h3>
+        <button class="btn btn-primary btn-sm" onclick="openModal('modal-new-food')">+ Nuevo alimento</button>
+      </div>
+      <input class="search-bar" type="text" placeholder="Buscar…" value="${foodFilter}"
+        oninput="document.getElementById('main').innerHTML = renderFoods(this.value)">
+      ${list.length === 0 ? '<p class="empty">Sin alimentos</p>' : list.map(f => `
+        <div class="list-item">
+          <div>
+            <div class="list-name">${f.name}</div>
+            <div class="list-macros">${f.kcal} kcal · ${f.protein}g P · ${f.carbs}g C · ${f.fat}g G /100g</div>
+          </div>
+          <button class="icon-btn" onclick="deleteFood('${f.id}')">×</button>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+// ── Recipes ──
+let recipeFilter = '';
+function renderRecipes(filter) {
+  if (filter !== undefined) recipeFilter = filter;
+  const q = recipeFilter.toLowerCase();
+  const list = recipes.filter(r => r.name.toLowerCase().includes(q));
+  return `
+    <div class="card">
+      <div class="section-header">
+        <h3>Recetas guardadas</h3>
+        <button class="btn btn-primary btn-sm" onclick="openModal('modal-new-recipe')">+ Nueva receta</button>
+      </div>
+      <input class="search-bar" type="text" placeholder="Buscar…" value="${recipeFilter}"
+        oninput="document.getElementById('main').innerHTML = renderRecipes(this.value)">
+      ${list.length === 0 ? '<p class="empty">Sin recetas</p>' : list.map(r => `
+        <div class="list-item">
+          <div>
+            <div class="list-name">${r.name}</div>
+            <div class="list-macros">${r.kcal} kcal · ${r.protein}g P · ${r.carbs}g C · ${r.fat}g G /100g</div>
+          </div>
+          <button class="icon-btn" onclick="deleteRecipe('${r.id}')">×</button>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+// ── Goals ──
+function renderGoals() {
+  return `
+    <div class="card">
+      <div class="section-header"><h3>Objetivos diarios</h3></div>
+      <div class="goals-form">
+        <div class="form-group"><label>Calorías</label><input type="number" id="g-cal" value="${goals.calories}"></div>
+        <div class="form-group"><label>Proteína (g)</label><input type="number" id="g-protein" value="${goals.protein_g}"></div>
+        <div class="form-group"><label>Carbos (g)</label><input type="number" id="g-carbs" value="${goals.carbs_g}"></div>
+        <div class="form-group"><label>Grasa (g)</label><input type="number" id="g-fat" value="${goals.fat_g}"></div>
+        <div class="form-group"><label>Agua (ml)</label><input type="number" id="g-water" value="${goals.water_ml}"></div>
+        <button class="btn btn-primary" onclick="saveGoals()">Guardar objetivos</button>
+      </div>
+    </div>
+  `;
+}
+
+// ══════════════════════════════════════════
+//  ACTIONS
+// ══════════════════════════════════════════
+async function deleteDiary(id) {
+  await sb.from('diary_entries').delete().eq('id', id);
+  diary = diary.filter(e => e.id !== id);
+  renderTab();
+}
+async function addWater(ml) {
+  await sb.from('water_entries').insert({ user_id: user.id, date: today, amount_ml: ml });
+  waterTotal += ml;
+  renderTab();
+}
+async function addCustomWater() {
+  const el = document.getElementById('water-custom');
+  const ml = Number(el.value);
+  if (!ml || ml <= 0) return;
+  el.value = '';
+  await addWater(ml);
+}
+async function deleteFood(id) {
+  await sb.from('foods').delete().eq('id', id);
+  foods = foods.filter(f => f.id !== id);
+  renderTab();
+}
+async function deleteRecipe(id) {
+  await sb.from('recipes').delete().eq('id', id);
+  recipes = recipes.filter(r => r.id !== id);
+  renderTab();
+}
+async function saveGoals() {
+  const g = {
+    user_id:   user.id,
+    calories:  Number(document.getElementById('g-cal').value),
+    protein_g: Number(document.getElementById('g-protein').value),
+    carbs_g:   Number(document.getElementById('g-carbs').value),
+    fat_g:     Number(document.getElementById('g-fat').value),
+    water_ml:  Number(document.getElementById('g-water').value),
+  };
+  const { error } = await sb.from('user_goals').upsert(g, { onConflict: 'user_id' });
+  if (!error) { goals = g; renderTab(); }
+}
+async function saveNewFood() {
+  const f = {
+    user_id: user.id,
+    name:    document.getElementById('nf-name').value.trim(),
+    kcal:    Number(document.getElementById('nf-kcal').value),
+    protein: Number(document.getElementById('nf-protein').value),
+    carbs:   Number(document.getElementById('nf-carbs').value),
+    fat:     Number(document.getElementById('nf-fat').value),
+  };
+  if (!f.name) return;
+  const { data } = await sb.from('foods').insert(f).select().single();
+  if (data) foods.push(data);
+  foods.sort((a, b) => a.name.localeCompare(b.name));
+  closeModal('modal-new-food');
+  clearFields(['nf-name','nf-kcal','nf-protein','nf-carbs','nf-fat']);
+  renderTab();
+}
+async function saveNewRecipe() {
+  const rec = {
+    user_id: user.id,
+    name:    document.getElementById('nr-name').value.trim(),
+    kcal:    Number(document.getElementById('nr-kcal').value),
+    protein: Number(document.getElementById('nr-protein').value),
+    carbs:   Number(document.getElementById('nr-carbs').value),
+    fat:     Number(document.getElementById('nr-fat').value),
+  };
+  if (!rec.name) return;
+  const { data } = await sb.from('recipes').insert(rec).select().single();
+  if (data) recipes.push(data);
+  recipes.sort((a, b) => a.name.localeCompare(b.name));
+  closeModal('modal-new-recipe');
+  clearFields(['nr-name','nr-kcal','nr-protein','nr-carbs','nr-fat']);
+  renderTab();
+}
+function clearFields(ids) { ids.forEach(id => document.getElementById(id).value = ''); }
+
+// ══════════════════════════════════════════
+//  ADD MEAL MODAL
+// ══════════════════════════════════════════
+function openAddMeal() {
+  selectedItem = null;
+  srItems = [];
+  document.getElementById('meal-search').value = '';
+  document.getElementById('meal-results').style.display = 'none';
+  document.getElementById('meal-results').innerHTML = '';
+  document.getElementById('meal-selected').style.display = 'none';
+  document.getElementById('meal-qty').value = '';
+  toggleInlineRecipe(false);
+  openModal('modal-add-meal');
+}
+function searchItems(query) {
+  const q = query.toLowerCase().trim();
+  const resultsEl = document.getElementById('meal-results');
+  if (!q) { resultsEl.style.display = 'none'; return; }
+  srItems = [
+    ...foods.map(f   => ({ ...f, _type: 'food'   })),
+    ...recipes.map(r => ({ ...r, _type: 'recipe'  })),
+  ].filter(i => i.name.toLowerCase().includes(q));
+  if (!srItems.length) { resultsEl.style.display = 'none'; return; }
+  resultsEl.style.display = 'block';
+  resultsEl.innerHTML = srItems.map((item, idx) => `
+    <div class="sr-item" onclick="selectItem(${idx})">
+      <div class="sr-name">${item.name}${item._type === 'recipe' ? '<span class="sr-badge">receta</span>' : ''}</div>
+      <div class="sr-macros">${item.kcal} kcal · ${item.protein}g P · ${item.carbs}g C · ${item.fat}g G /100g</div>
+    </div>
+  `).join('');
+}
+function selectItem(idx) {
+  selectedItem = srItems[idx];
+  document.getElementById('meal-search').value = selectedItem.name;
+  document.getElementById('meal-results').style.display = 'none';
+  document.getElementById('sel-name').textContent = selectedItem.name;
+  document.getElementById('sel-macros').textContent =
+    `${selectedItem.kcal} kcal · ${selectedItem.protein}g P · ${selectedItem.carbs}g C · ${selectedItem.fat}g G /100g`;
+  document.getElementById('meal-selected').style.display = 'block';
+  document.getElementById('meal-qty').focus();
+}
+async function registerMeal() {
+  if (!selectedItem) return alert('Selecciona un alimento primero.');
+  const qty = Number(document.getElementById('meal-qty').value);
+  if (!qty || qty <= 0) return alert('Indica la cantidad en gramos.');
+  const f = qty / 100;
+  const entry = {
+    user_id:   user.id,
+    date:      today,
+    item_name: selectedItem.name,
+    quantity_g: qty,
+    kcal:      selectedItem.kcal    * f,
+    protein:   selectedItem.protein * f,
+    carbs:     selectedItem.carbs   * f,
+    fat:       selectedItem.fat     * f,
+  };
+  const { data } = await sb.from('diary_entries').insert(entry).select().single();
+  if (data) diary.push(data);
+  closeModal('modal-add-meal');
+  renderTab();
+}
+function toggleInlineRecipe(show) {
+  document.getElementById('inline-recipe').style.display = show ? 'block' : 'none';
+  document.getElementById('ir-toggle').style.display     = show ? 'none'  : 'inline';
+}
+async function saveInlineRecipe() {
+  const rec = {
+    user_id: user.id,
+    name:    document.getElementById('ir-name').value.trim(),
+    kcal:    Number(document.getElementById('ir-kcal').value),
+    protein: Number(document.getElementById('ir-protein').value),
+    carbs:   Number(document.getElementById('ir-carbs').value),
+    fat:     Number(document.getElementById('ir-fat').value),
+  };
+  if (!rec.name) return;
+  const { data } = await sb.from('recipes').insert(rec).select().single();
+  if (data) {
+    recipes.push(data);
+    recipes.sort((a, b) => a.name.localeCompare(b.name));
+    srItems.push({ ...data, _type: 'recipe' });
+    selectItem(srItems.length - 1);
+    toggleInlineRecipe(false);
+    clearFields(['ir-name','ir-kcal','ir-protein','ir-carbs','ir-fat']);
+  }
+}
+
+// ══════════════════════════════════════════
+//  MODALS
+// ══════════════════════════════════════════
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+document.querySelectorAll('.modal-overlay').forEach(o => {
+  o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); });
+});
+</script>
+</body>
+</html>
