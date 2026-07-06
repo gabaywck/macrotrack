@@ -166,6 +166,13 @@
     .toggle-link { background: none; border: none; color: var(--accent); cursor: pointer; font-size: .82rem; text-decoration: underline; padding: 0; margin-top: .5rem; display: inline-block; }
     hr.divider { border: none; border-top: 1px solid var(--border); margin: 1rem 0; }
     .inline-recipe-title { font-size: .92rem; font-weight: 600; margin-bottom: .7rem; }
+    .ingredient-item { display:flex; align-items:center; justify-content:space-between; padding:.4rem .6rem; background:var(--surface2); border-radius:.35rem; margin:.3rem 0; }
+    .ingredient-item-name { font-size:.85rem; font-weight:500; }
+    .ingredient-item-macros { font-size:.75rem; color:var(--muted); }
+    .recipe-total { font-size:.8rem; color:var(--muted); padding:.5rem; border-top:1px solid var(--border); margin-top:.4rem; }
+    .ni-form { background:var(--surface); border:1px solid var(--border); border-radius:.5rem; padding:.7rem; margin:.5rem 0; }
+    .ni-form-title { font-size:.75rem; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:.5rem; }
+    .modal { max-height: 85vh; overflow-y: auto; }
   </style>
 </head>
 <body>
@@ -274,16 +281,50 @@
 <div id="modal-new-recipe" class="modal-overlay">
   <div class="modal">
     <h2>Nueva receta</h2>
-    <div class="form-group"><label>Nombre</label><input type="text" id="nr-name"></div>
-    <div class="form-grid">
-      <div class="form-group"><label>Kcal/100g</label><input type="number" id="nr-kcal"></div>
-      <div class="form-group"><label>Proteína/100g</label><input type="number" id="nr-protein"></div>
-      <div class="form-group"><label>Carbos/100g</label><input type="number" id="nr-carbs"></div>
-      <div class="form-group"><label>Grasa/100g</label><input type="number" id="nr-fat"></div>
+    <div class="form-group"><label>Nombre</label><input type="text" id="nr-name" placeholder="Ej: Tortilla de patatas"></div>
+    <div id="nr-ingredients-list"></div>
+    <div class="ni-form">
+      <div class="ni-form-title">Añadir ingrediente</div>
+      <div class="form-group"><input type="text" id="ni-name" placeholder="Nombre del ingrediente"></div>
+      <div class="form-grid">
+        <div class="form-group"><label>Cantidad (g)</label><input type="number" id="ni-qty" placeholder="100" min="0"></div>
+        <div class="form-group"><label>Kcal/100g</label><input type="number" id="ni-kcal" placeholder="0" min="0"></div>
+        <div class="form-group"><label>Proteína/100g</label><input type="number" id="ni-protein" placeholder="0" min="0"></div>
+        <div class="form-group"><label>Carbos/100g</label><input type="number" id="ni-carbs" placeholder="0" min="0"></div>
+        <div class="form-group"><label>Grasa/100g</label><input type="number" id="ni-fat" placeholder="0" min="0"></div>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="addIngredientToNew()">+ Añadir ingrediente</button>
     </div>
+    <div id="nr-total" class="recipe-total"></div>
     <div class="modal-actions">
-      <button class="btn btn-primary" onclick="saveNewRecipe()">Guardar</button>
+      <button class="btn btn-primary" onclick="saveNewRecipe()">Guardar receta</button>
       <button class="btn btn-secondary" onclick="closeModal('modal-new-recipe')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: Editar receta ══ -->
+<div id="modal-edit-recipe" class="modal-overlay">
+  <div class="modal">
+    <h2>Editar receta</h2>
+    <div class="form-group"><label>Nombre</label><input type="text" id="er-name"></div>
+    <div id="er-ingredients-list"></div>
+    <div class="ni-form">
+      <div class="ni-form-title">Añadir ingrediente</div>
+      <div class="form-group"><input type="text" id="ei-name" placeholder="Nombre del ingrediente"></div>
+      <div class="form-grid">
+        <div class="form-group"><label>Cantidad (g)</label><input type="number" id="ei-qty" placeholder="100" min="0"></div>
+        <div class="form-group"><label>Kcal/100g</label><input type="number" id="ei-kcal" placeholder="0" min="0"></div>
+        <div class="form-group"><label>Proteína/100g</label><input type="number" id="ei-protein" placeholder="0" min="0"></div>
+        <div class="form-group"><label>Carbos/100g</label><input type="number" id="ei-carbs" placeholder="0" min="0"></div>
+        <div class="form-group"><label>Grasa/100g</label><input type="number" id="ei-fat" placeholder="0" min="0"></div>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="addIngredientToEdit()">+ Añadir ingrediente</button>
+    </div>
+    <div id="er-total" class="recipe-total"></div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="saveEditRecipe()">Guardar cambios</button>
+      <button class="btn btn-secondary" onclick="closeModal('modal-edit-recipe')">Cancelar</button>
     </div>
   </div>
 </div>
@@ -331,6 +372,10 @@ let foods       = [];
 let recipes     = [];
 let goals       = { calories: 2000, protein_g: 150, carbs_g: 200, fat_g: 70, water_ml: 2000 };
 let selectedItem = null;
+let recipeIngredientsMap  = {};   // recipe_id → ingredients[]
+let newRecipeIngredients  = [];   // temp for new recipe modal
+let editRecipeId          = null; // recipe being edited
+let editRecipeIngredients = [];   // temp for edit recipe modal
 let srItems      = []; // search result items cache
 
 // ══════════════════════════════════════════
@@ -422,6 +467,7 @@ async function initApp(u) {
 }
 async function loadAll() {
   await Promise.all([loadDiary(), loadWater(), loadFoods(), loadRecipes(), loadGoals()]);
+  await loadRecipeIngredients();
 }
 
 // ══════════════════════════════════════════
@@ -448,6 +494,16 @@ async function loadRecipes() {
     .select('*').eq('user_id', user.id).order('name');
   recipes = data || [];
   if (recipes.length === 0) await seedRecipes();
+}
+async function loadRecipeIngredients() {
+  if (recipes.length === 0) return;
+  const { data } = await sb.from('recipe_ingredients')
+    .select('*').eq('user_id', user.id);
+  recipeIngredientsMap = {};
+  (data || []).forEach(ing => {
+    if (!recipeIngredientsMap[ing.recipe_id]) recipeIngredientsMap[ing.recipe_id] = [];
+    recipeIngredientsMap[ing.recipe_id].push(ing);
+  });
 }
 async function loadGoals() {
   const { data } = await sb.from('user_goals')
@@ -602,19 +658,25 @@ function renderRecipes(filter) {
     <div class="card">
       <div class="section-header">
         <h3>Recetas guardadas</h3>
-        <button class="btn btn-primary btn-sm" onclick="openModal('modal-new-recipe')">+ Nueva receta</button>
+        <button class="btn btn-primary btn-sm" onclick="openNewRecipe()">+ Nueva receta</button>
       </div>
       <input class="search-bar" type="text" placeholder="Buscar…" value="${recipeFilter}"
         oninput="document.getElementById('main').innerHTML = renderRecipes(this.value)">
-      ${list.length === 0 ? '<p class="empty">Sin recetas</p>' : list.map(r => `
+      ${list.length === 0 ? '<p class="empty">Sin recetas</p>' : list.map(r => {
+        const ings = recipeIngredientsMap[r.id] || [];
+        return `
         <div class="list-item">
           <div>
             <div class="list-name">${r.name}</div>
-            <div class="list-macros">${r.kcal} kcal · ${r.protein}g P · ${r.carbs}g C · ${r.fat}g G /100g</div>
+            <div class="list-macros">${r.kcal} kcal · ${r.protein}g P · ${r.carbs}g C · ${r.fat}g G /100g${ings.length ? ` · ${ings.length} ingredientes` : ''}</div>
           </div>
-          <button class="icon-btn" onclick="deleteRecipe('${r.id}')">×</button>
+          <div style="display:flex;gap:.3rem">
+            <button class="icon-btn" title="Editar" onclick="openEditRecipe('${r.id}')">✏️</button>
+            <button class="icon-btn" onclick="deleteRecipe('${r.id}')">×</button>
+          </div>
         </div>
-      `).join('')}
+        `;
+      }).join('')}
     </div>
   `;
 }
@@ -695,21 +757,132 @@ async function saveNewFood() {
   clearFields(['nf-name','nf-kcal','nf-protein','nf-carbs','nf-fat']);
   renderTab();
 }
-async function saveNewRecipe() {
-  const rec = {
-    user_id: user.id,
-    name:    document.getElementById('nr-name').value.trim(),
-    kcal:    Number(document.getElementById('nr-kcal').value),
-    protein: Number(document.getElementById('nr-protein').value),
-    carbs:   Number(document.getElementById('nr-carbs').value),
-    fat:     Number(document.getElementById('nr-fat').value),
+// ── Recipe ingredient helpers ──
+function computeRecipeMacros(ings) {
+  const totalWeight = ings.reduce((s, i) => s + i.quantity_g, 0);
+  if (totalWeight === 0) return { kcal:0, protein:0, carbs:0, fat:0, weight:0, total_kcal:0, total_protein:0, total_carbs:0, total_fat:0 };
+  const t = ings.reduce((acc, i) => {
+    const f = i.quantity_g / 100;
+    return { kcal: acc.kcal+i.kcal*f, protein: acc.protein+i.protein*f, carbs: acc.carbs+i.carbs*f, fat: acc.fat+i.fat*f };
+  }, { kcal:0, protein:0, carbs:0, fat:0 });
+  return {
+    kcal:    +(t.kcal    / totalWeight * 100).toFixed(1),
+    protein: +(t.protein / totalWeight * 100).toFixed(1),
+    carbs:   +(t.carbs   / totalWeight * 100).toFixed(1),
+    fat:     +(t.fat     / totalWeight * 100).toFixed(1),
+    weight:  totalWeight,
+    total_kcal:    +t.kcal.toFixed(0),
+    total_protein: +t.protein.toFixed(1),
+    total_carbs:   +t.carbs.toFixed(1),
+    total_fat:     +t.fat.toFixed(1),
   };
-  if (!rec.name) return;
-  const { data } = await sb.from('recipes').insert(rec).select().single();
-  if (data) recipes.push(data);
+}
+function ingredientListHTML(ings, removeFn) {
+  if (!ings.length) return '<p style="font-size:.82rem;color:var(--muted);margin:.3rem 0">Sin ingredientes todavía</p>';
+  return ings.map((ing, i) => `
+    <div class="ingredient-item">
+      <div>
+        <div class="ingredient-item-name">${ing.name} — ${ing.quantity_g}g</div>
+        <div class="ingredient-item-macros">${(ing.kcal*ing.quantity_g/100).toFixed(0)} kcal · ${(ing.protein*ing.quantity_g/100).toFixed(1)}g P · ${(ing.carbs*ing.quantity_g/100).toFixed(1)}g C · ${(ing.fat*ing.quantity_g/100).toFixed(1)}g G</div>
+      </div>
+      <button class="icon-btn" onclick="${removeFn}(${i})">×</button>
+    </div>
+  `).join('');
+}
+function totalHTML(ings) {
+  const m = computeRecipeMacros(ings);
+  if (!ings.length) return '';
+  return `<strong>Total:</strong> ${m.total_kcal} kcal · ${m.total_protein}g P · ${m.total_carbs}g C · ${m.total_fat}g G (${m.weight}g) &nbsp;|&nbsp; por 100g: ${m.kcal} kcal`;
+}
+
+// ── New recipe ──
+function openNewRecipe() {
+  newRecipeIngredients = [];
+  document.getElementById('nr-name').value = '';
+  clearFields(['ni-name','ni-qty','ni-kcal','ni-protein','ni-carbs','ni-fat']);
+  renderNewIngredients();
+  openModal('modal-new-recipe');
+}
+function addIngredientToNew() {
+  const name = document.getElementById('ni-name').value.trim();
+  const qty  = Number(document.getElementById('ni-qty').value);
+  if (!name || !qty) return;
+  newRecipeIngredients.push({ name, quantity_g: qty,
+    kcal:    Number(document.getElementById('ni-kcal').value)    || 0,
+    protein: Number(document.getElementById('ni-protein').value) || 0,
+    carbs:   Number(document.getElementById('ni-carbs').value)   || 0,
+    fat:     Number(document.getElementById('ni-fat').value)     || 0,
+  });
+  clearFields(['ni-name','ni-qty','ni-kcal','ni-protein','ni-carbs','ni-fat']);
+  document.getElementById('ni-name').focus();
+  renderNewIngredients();
+}
+function removeNewIngredient(i) { newRecipeIngredients.splice(i, 1); renderNewIngredients(); }
+function renderNewIngredients() {
+  document.getElementById('nr-ingredients-list').innerHTML = ingredientListHTML(newRecipeIngredients, 'removeNewIngredient');
+  document.getElementById('nr-total').innerHTML = totalHTML(newRecipeIngredients);
+}
+async function saveNewRecipe() {
+  const name = document.getElementById('nr-name').value.trim();
+  if (!name) return alert('Ponle nombre a la receta');
+  if (!newRecipeIngredients.length) return alert('Añade al menos un ingrediente');
+  const m = computeRecipeMacros(newRecipeIngredients);
+  const { data: rec } = await sb.from('recipes').insert({ user_id: user.id, name, kcal: m.kcal, protein: m.protein, carbs: m.carbs, fat: m.fat }).select().single();
+  if (!rec) return;
+  const ings = newRecipeIngredients.map(i => ({ ...i, recipe_id: rec.id, user_id: user.id }));
+  await sb.from('recipe_ingredients').insert(ings);
+  recipeIngredientsMap[rec.id] = ings;
+  recipes.push(rec);
   recipes.sort((a, b) => a.name.localeCompare(b.name));
   closeModal('modal-new-recipe');
-  clearFields(['nr-name','nr-kcal','nr-protein','nr-carbs','nr-fat']);
+  renderTab();
+}
+
+// ── Edit recipe ──
+function openEditRecipe(id) {
+  editRecipeId = id;
+  const rec = recipes.find(r => r.id === id);
+  document.getElementById('er-name').value = rec.name;
+  editRecipeIngredients = (recipeIngredientsMap[id] || []).map(i => ({...i}));
+  clearFields(['ei-name','ei-qty','ei-kcal','ei-protein','ei-carbs','ei-fat']);
+  renderEditIngredients();
+  openModal('modal-edit-recipe');
+}
+function addIngredientToEdit() {
+  const name = document.getElementById('ei-name').value.trim();
+  const qty  = Number(document.getElementById('ei-qty').value);
+  if (!name || !qty) return;
+  editRecipeIngredients.push({ name, quantity_g: qty,
+    kcal:    Number(document.getElementById('ei-kcal').value)    || 0,
+    protein: Number(document.getElementById('ei-protein').value) || 0,
+    carbs:   Number(document.getElementById('ei-carbs').value)   || 0,
+    fat:     Number(document.getElementById('ei-fat').value)     || 0,
+  });
+  clearFields(['ei-name','ei-qty','ei-kcal','ei-protein','ei-carbs','ei-fat']);
+  document.getElementById('ei-name').focus();
+  renderEditIngredients();
+}
+function removeEditIngredient(i) { editRecipeIngredients.splice(i, 1); renderEditIngredients(); }
+function renderEditIngredients() {
+  document.getElementById('er-ingredients-list').innerHTML = ingredientListHTML(editRecipeIngredients, 'removeEditIngredient');
+  document.getElementById('er-total').innerHTML = totalHTML(editRecipeIngredients);
+}
+async function saveEditRecipe() {
+  const name = document.getElementById('er-name').value.trim();
+  if (!name) return alert('Ponle nombre a la receta');
+  if (!editRecipeIngredients.length) return alert('La receta necesita al menos un ingrediente');
+  const m = computeRecipeMacros(editRecipeIngredients);
+  await sb.from('recipes').update({ name, kcal: m.kcal, protein: m.protein, carbs: m.carbs, fat: m.fat }).eq('id', editRecipeId);
+  await sb.from('recipe_ingredients').delete().eq('recipe_id', editRecipeId);
+  const ings = editRecipeIngredients.map(i => ({
+    name: i.name, quantity_g: i.quantity_g, kcal: i.kcal, protein: i.protein, carbs: i.carbs, fat: i.fat,
+    recipe_id: editRecipeId, user_id: user.id,
+  }));
+  await sb.from('recipe_ingredients').insert(ings);
+  const idx = recipes.findIndex(r => r.id === editRecipeId);
+  if (idx !== -1) recipes[idx] = { ...recipes[idx], name, kcal: m.kcal, protein: m.protein, carbs: m.carbs, fat: m.fat };
+  recipeIngredientsMap[editRecipeId] = ings;
+  closeModal('modal-edit-recipe');
   renderTab();
 }
 function clearFields(ids) { ids.forEach(id => document.getElementById(id).value = ''); }
@@ -808,6 +981,9 @@ function closeModal(id) { document.getElementById(id).classList.remove('open'); 
 document.querySelectorAll('.modal-overlay').forEach(o => {
   o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); });
 });
+// Allow Enter key to add ingredient in new/edit recipe forms
+document.getElementById('ni-fat').addEventListener('keydown', e => { if (e.key === 'Enter') addIngredientToNew(); });
+document.getElementById('ei-fat').addEventListener('keydown', e => { if (e.key === 'Enter') addIngredientToEdit(); });
 </script>
 </body>
 </html>
