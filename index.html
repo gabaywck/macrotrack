@@ -231,9 +231,14 @@
         <div class="selected-box-name" id="sel-name"></div>
         <div class="selected-box-macros" id="sel-macros"></div>
       </div>
+      <div id="qty-mode-toggle" class="auth-tabs" style="display:none;margin-bottom:.6rem">
+        <button type="button" id="mode-raciones" class="active" onclick="setQtyMode('raciones')">Raciones</button>
+        <button type="button" id="mode-gramos" onclick="setQtyMode('gramos')">Gramos</button>
+      </div>
       <div class="form-group">
-        <label>Cantidad (g)</label>
-        <input type="number" id="meal-qty" placeholder="gramos" min="1">
+        <label id="meal-qty-label">Cantidad (g)</label>
+        <input type="number" id="meal-qty" placeholder="gramos" min="0.1" step="1" oninput="updateQtyPreview()">
+        <div id="meal-qty-preview" class="list-macros" style="margin-top:.35rem"></div>
       </div>
     </div>
     <div id="inline-recipe" style="display:none">
@@ -538,6 +543,14 @@ function renderTab() {
 // ── Today ──
 function pct(v, g) { return Math.min(100, g > 0 ? (v / g) * 100 : 0).toFixed(1) + '%'; }
 function r(n) { return Math.round(n * 10) / 10; }
+function diaryQtyLabel(e) {
+  const rec = recipes.find(rr => rr.name === e.item_name);
+  if (rec) {
+    const raciones = +(e.quantity_g / getServingWeight(rec.id)).toFixed(2);
+    return `${fmtNum(raciones)} ${raciones === 1 ? 'ración' : 'raciones'}`;
+  }
+  return `${e.quantity_g}g`;
+}
 
 function renderToday() {
   const tot = diary.reduce((s, e) => ({
@@ -554,7 +567,7 @@ function renderToday() {
     : diary.map(e => `
         <div class="diary-entry">
           <div>
-            <div class="diary-name">${e.item_name} <span class="diary-qty">(${e.quantity_g}g)</span></div>
+            <div class="diary-name">${e.item_name} <span class="diary-qty">(${diaryQtyLabel(e)})</span></div>
             <div class="diary-macros">${r(e.kcal)} kcal · ${r(e.protein)}g P · ${r(e.carbs)}g C · ${r(e.fat)}g G</div>
           </div>
           <button class="icon-btn" onclick="deleteDiary('${e.id}')">×</button>
@@ -794,6 +807,13 @@ function totalHTML(ings) {
   if (!ings.length) return '';
   return `<strong>Total:</strong> ${m.total_kcal} kcal · ${m.total_protein}g P · ${m.total_carbs}g C · ${m.total_fat}g G (${m.weight}g) &nbsp;|&nbsp; por 100g: ${m.kcal} kcal`;
 }
+// Peso de 1 ración de una receta: suma de sus ingredientes, o 100g si no tiene ingredientes registrados
+function getServingWeight(recipeId) {
+  const ings = recipeIngredientsMap[recipeId] || [];
+  if (!ings.length) return 100;
+  return ings.reduce((s, i) => s + Number(i.quantity_g), 0);
+}
+function fmtNum(n) { return +n.toFixed(2) + ''; }
 
 // ── New recipe ──
 function openNewRecipe() {
@@ -890,14 +910,18 @@ function clearFields(ids) { ids.forEach(id => document.getElementById(id).value 
 // ══════════════════════════════════════════
 //  ADD MEAL MODAL
 // ══════════════════════════════════════════
+let qtyMode = 'gramos'; // 'raciones' | 'gramos'
 function openAddMeal() {
   selectedItem = null;
   srItems = [];
+  qtyMode = 'gramos';
   document.getElementById('meal-search').value = '';
   document.getElementById('meal-results').style.display = 'none';
   document.getElementById('meal-results').innerHTML = '';
   document.getElementById('meal-selected').style.display = 'none';
+  document.getElementById('qty-mode-toggle').style.display = 'none';
   document.getElementById('meal-qty').value = '';
+  document.getElementById('meal-qty-preview').textContent = '';
   toggleInlineRecipe(false);
   openModal('modal-add-meal');
 }
@@ -923,21 +947,71 @@ function selectItem(idx) {
   document.getElementById('meal-search').value = selectedItem.name;
   document.getElementById('meal-results').style.display = 'none';
   document.getElementById('sel-name').textContent = selectedItem.name;
-  document.getElementById('sel-macros').textContent =
-    `${selectedItem.kcal} kcal · ${selectedItem.protein}g P · ${selectedItem.carbs}g C · ${selectedItem.fat}g G /100g`;
+
+  const toggle = document.getElementById('qty-mode-toggle');
+  const qtyEl  = document.getElementById('meal-qty');
+  if (selectedItem._type === 'recipe') {
+    toggle.style.display = 'flex';
+    setQtyMode('raciones');
+    qtyEl.value = 1;
+  } else {
+    toggle.style.display = 'none';
+    setQtyMode('gramos');
+    qtyEl.value = '';
+    document.getElementById('sel-macros').textContent =
+      `${selectedItem.kcal} kcal · ${selectedItem.protein}g P · ${selectedItem.carbs}g C · ${selectedItem.fat}g G /100g`;
+  }
   document.getElementById('meal-selected').style.display = 'block';
-  document.getElementById('meal-qty').focus();
+  updateQtyPreview();
+  qtyEl.focus();
+}
+function setQtyMode(mode) {
+  qtyMode = mode;
+  document.getElementById('mode-raciones').classList.toggle('active', mode === 'raciones');
+  document.getElementById('mode-gramos').classList.toggle('active', mode === 'gramos');
+  const qtyEl = document.getElementById('meal-qty');
+  const label = document.getElementById('meal-qty-label');
+  if (mode === 'raciones') {
+    label.textContent = 'Cantidad (raciones)';
+    qtyEl.placeholder = 'ej. 1';
+    qtyEl.step = '0.25';
+    if (selectedItem) {
+      const sw = getServingWeight(selectedItem.id);
+      document.getElementById('sel-macros').textContent =
+        `1 ración (${sw}g): ${Math.round(selectedItem.kcal*sw/100)} kcal · ${fmtNum(selectedItem.protein*sw/100)}g P · ${fmtNum(selectedItem.carbs*sw/100)}g C · ${fmtNum(selectedItem.fat*sw/100)}g G`;
+    }
+  } else {
+    label.textContent = 'Cantidad (g)';
+    qtyEl.placeholder = 'gramos';
+    qtyEl.step = '1';
+    if (selectedItem) {
+      document.getElementById('sel-macros').textContent =
+        `${selectedItem.kcal} kcal · ${selectedItem.protein}g P · ${selectedItem.carbs}g C · ${selectedItem.fat}g G /100g`;
+    }
+  }
+  updateQtyPreview();
+}
+function updateQtyPreview() {
+  const previewEl = document.getElementById('meal-qty-preview');
+  if (!selectedItem) { previewEl.textContent = ''; return; }
+  const qty = Number(document.getElementById('meal-qty').value);
+  if (!qty || qty <= 0) { previewEl.textContent = ''; return; }
+  const grams = qtyMode === 'raciones' ? qty * getServingWeight(selectedItem.id) : qty;
+  const f = grams / 100;
+  previewEl.textContent =
+    `Total: ${Math.round(selectedItem.kcal*f)} kcal · ${fmtNum(selectedItem.protein*f)}g P · ${fmtNum(selectedItem.carbs*f)}g C · ${fmtNum(selectedItem.fat*f)}g G`;
 }
 async function registerMeal() {
   if (!selectedItem) return alert('Selecciona un alimento primero.');
   const qty = Number(document.getElementById('meal-qty').value);
-  if (!qty || qty <= 0) return alert('Indica la cantidad en gramos.');
-  const f = qty / 100;
+  if (!qty || qty <= 0) return alert(qtyMode === 'raciones' ? 'Indica el número de raciones.' : 'Indica la cantidad en gramos.');
+  const grams = qtyMode === 'raciones' ? qty * getServingWeight(selectedItem.id) : qty;
+  const f = grams / 100;
   const entry = {
     user_id:   user.id,
     date:      today,
     item_name: selectedItem.name,
-    quantity_g: qty,
+    quantity_g: grams,
     kcal:      selectedItem.kcal    * f,
     protein:   selectedItem.protein * f,
     carbs:     selectedItem.carbs   * f,
