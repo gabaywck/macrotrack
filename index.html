@@ -215,6 +215,7 @@
     <button id="nav-foods"             onclick="switchTab('foods')">Alimentos</button>
     <button id="nav-recipes"           onclick="switchTab('recipes')">Recetas</button>
     <button id="nav-goals"             onclick="switchTab('goals')">Objetivos</button>
+    <button id="nav-report"            onclick="switchTab('report')">Informe</button>
   </nav>
 </div>
 
@@ -538,6 +539,7 @@ function renderTab() {
   else if (tab === 'foods')   main.innerHTML = renderFoods();
   else if (tab === 'recipes') main.innerHTML = renderRecipes();
   else if (tab === 'goals')   main.innerHTML = renderGoals();
+  else if (tab === 'report')  main.innerHTML = renderReport();
 }
 
 // ── Today ──
@@ -709,6 +711,106 @@ function renderGoals() {
       </div>
     </div>
   `;
+}
+
+// ── Report ──
+let reportFrom = new Date(Date.now() - 6 * 86400000).toISOString().split('T')[0];
+let reportTo   = today;
+let reportRows = null; // null = sin consultar todavía
+
+function renderReport() {
+  return `
+    <div class="card">
+      <div class="section-header"><h3>Informe por rango de fechas</h3></div>
+      <div class="form-grid">
+        <div class="form-group"><label>Desde</label><input type="date" id="rep-from" value="${reportFrom}"></div>
+        <div class="form-group"><label>Hasta</label><input type="date" id="rep-to" value="${reportTo}"></div>
+      </div>
+      <button class="btn btn-primary" onclick="loadReport()">Consultar</button>
+    </div>
+    <div id="report-results">${reportRows ? renderReportResults() : ''}</div>
+  `;
+}
+
+async function loadReport() {
+  reportFrom = document.getElementById('rep-from').value;
+  reportTo   = document.getElementById('rep-to').value;
+  if (!reportFrom || !reportTo || reportFrom > reportTo) { alert('Rango de fechas no válido'); return; }
+
+  const { data } = await sb.from('diary_entries')
+    .select('date, kcal')
+    .eq('user_id', user.id)
+    .gte('date', reportFrom)
+    .lte('date', reportTo)
+    .order('date');
+
+  const byDate = {};
+  (data || []).forEach(e => { byDate[e.date] = (byDate[e.date] || 0) + Number(e.kcal); });
+
+  reportRows = Object.keys(byDate).sort().map(date => {
+    const kcal = byDate[date];
+    return { date, kcal, deficit: goals.calories - kcal };
+  });
+
+  document.getElementById('report-results').innerHTML = renderReportResults();
+}
+
+function renderReportResults() {
+  if (!reportRows) return '';
+  if (reportRows.length === 0) {
+    return '<div class="card"><p class="empty">Sin comidas registradas en ese rango</p></div>';
+  }
+
+  const n = reportRows.length;
+  const totalKcal    = reportRows.reduce((s, d) => s + d.kcal, 0);
+  const totalDeficit = reportRows.reduce((s, d) => s + d.deficit, 0);
+  const avgKcal       = totalKcal / n;
+  const avgDeficit    = totalDeficit / n;
+  const daysInDeficit = reportRows.filter(d => d.deficit > 0).length;
+
+  const dayRows = reportRows.map(d => {
+    const pctGoal = Math.min(100, goals.calories > 0 ? (d.kcal / goals.calories) * 100 : 0);
+    const over = d.kcal > goals.calories;
+    const deficitLabel = d.deficit >= 0
+      ? `déficit de ${Math.round(d.deficit)} kcal`
+      : `superávit de ${Math.round(-d.deficit)} kcal`;
+    return `
+      <div class="diary-entry" style="display:block">
+        <div class="diary-name">${formatReportDate(d.date)}</div>
+        <div class="diary-macros">${Math.round(d.kcal)} kcal · ${deficitLabel}</div>
+        <div class="bar"><div class="bar-fill" style="width:${pctGoal.toFixed(1)}%;background:${over ? 'var(--danger)' : 'var(--accent)'}"></div></div>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="card">
+      <div class="section-header"><h3>Resumen del periodo</h3></div>
+      <div class="macro-grid">
+        <div class="macro-col">
+          <div class="val">${Math.round(avgKcal)}</div>
+          <div class="lbl">Kcal media/día</div>
+        </div>
+        <div class="macro-col">
+          <div class="val">${avgDeficit >= 0 ? Math.round(avgDeficit) : '−' + Math.round(-avgDeficit)}</div>
+          <div class="lbl">Déficit medio</div>
+        </div>
+        <div class="macro-col">
+          <div class="val">${daysInDeficit}/${n}</div>
+          <div class="lbl">Días en déficit</div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="section-header"><h3>Detalle diario</h3></div>
+      ${dayRows}
+    </div>
+  `;
+}
+
+function formatReportDate(d) {
+  const [y, m, day] = d.split('-');
+  return `${day}/${m}/${y}`;
 }
 
 // ══════════════════════════════════════════
